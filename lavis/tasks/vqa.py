@@ -182,11 +182,18 @@ class GQATask(VQATask):
         pred_qa_pairs = []
 
         question_id = samples["question_id"]
+        question = samples["text_input"]
+        full_answers = samples["fullAnswer"]
         gt_answers = samples["answer"]
         
-        for answer, ques_id, gt_answer in zip(answers, question_id, gt_answers):
+        for answer, ques_id, ques, full_answer, gt_answer in zip(answers, question_id, question, full_answers, gt_answers):
             ques_id = int(ques_id.item())
-            pred_qa_pairs.append({"question_id": ques_id, "pred_ans": answer, "gt_ans": gt_answer})
+            pred_qa_pairs.append({
+                "question_id": ques_id,
+                "question": ques,
+                "full_answer": full_answer,
+                "pred_ans": answer, 
+                "gt_ans": gt_answer})
 
         return pred_qa_pairs
         
@@ -195,7 +202,7 @@ class GQATask(VQATask):
         """
         TODO: add other evaluation metrics for GQA
         """
-
+        # measuring accuracy compared to answer
         results = json.load(open(result_file, "r"))
         acc = []
         vqa_tool = VQAEval()
@@ -219,6 +226,10 @@ class GQATask(VQATask):
 
         accuracy = sum(acc) / len(acc) * 100
         metrics = {"agg_metrics": accuracy, "acc": accuracy}
+
+        # measuring bleu Cider Rouge Spice compared to full_answer
+        new_metrics = vqa_answer_eval(result_file)
+        metrics.update(new_metrics)
 
         with open(
             os.path.join(registry.get_path("output_dir"), "evaluate.txt"), "a"
@@ -312,3 +323,91 @@ class AOKVQATask(VQATask):
             json.dump(result_leaderboard, f)
 
         logging.info(f"Saved results for leaderboard evaluation at {result_file}")
+
+
+from pycocoevalcap.eval import COCOEvalCap
+from collections import defaultdict
+
+class GT_Answer:
+    def __init__(self,result_file):
+        self.result_file = result_file
+        self.imgToAnns = self.build_imgToAnns()
+    
+    def build_imgToAnns(self):
+        imgToAnns = defaultdict(list)
+        results = json.load(open(self.result_file, "r"))
+        for result in results:
+            fake_image_id, gt = result['question_id'],result['full_answer']
+            imgToAnns[fake_image_id].append({'image_id':fake_image_id,'caption':gt})
+        return imgToAnns
+    
+    def getImgIds(self):
+        return self.imgToAnns.keys() 
+
+class Predict_Answer:
+    def __init__(self,result_file):
+        self.result_file = result_file
+        self.imgToAnns = self.build_imgToAnns()
+    
+    def build_imgToAnns(self):
+        imgToAnns = defaultdict(list)
+        results = json.load(open(self.result_file, "r"))
+        for result in results:
+            fake_image_id, predict = result['question_id'],result['pred_ans']
+            imgToAnns[fake_image_id].append({'image_id':fake_image_id,'caption':predict})
+        return imgToAnns
+
+def vqa_answer_eval(result_file):
+    gt = GT_Answer(result_file)
+    pre = Predict_Answer(result_file)
+
+    answer_eval = COCOEvalCap(gt, pre)
+    answer_eval.evaluate()
+    metrics_dict = answer_eval.eval
+
+    for metric, score in metrics_dict.items():
+        print(f'{metric}: {score:.3f}')
+    
+    return metrics_dict
+    
+
+# from pycocoevalcap.bleu.bleu import Bleu
+# from pycocoevalcap.cider.cider import Cider
+# from pycocoevalcap.rouge.rouge import Rouge
+# from pycocoevalcap.spice.spice import Spice
+# from pycocoevalcap.meteor.meteor import Meteor
+# def compute_metrics(refs, hyps, no_overlap=False, no_skipthoughts=False, no_glove=False):
+
+#     ret_scores = {}
+#     if not no_overlap:
+#         scorers = [
+#             (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+#             (Rouge(), "ROUGE_L"),
+#             (Cider(), "CIDEr"),
+#             (Spice(), "SPICE")
+#         ]
+#         for scorer, method in scorers:
+#             score, scores = scorer.compute_score(refs, hyps)
+#             if isinstance(method, list):
+#                 for sc, scs, m in zip(score, scores, method):
+#                     print("%s: %0.6f" % (m, sc))
+#                     ret_scores[m] = sc
+#             else:
+#                 print("%s: %0.6f" % (method, score))
+#                 ret_scores[method] = score
+#             if isinstance(scorer, Meteor):
+#                 scorer.close()
+#         del scorers
+
+#     return ret_scores
+
+# def vqa_answer_eval(result_file):
+#     results = json.load(open(result_file, "r"))
+#     gts, res = {}, {}
+#     for result in results:
+#         ques_id, pred, gt = result['question_id'],result['pred_ans'], result['full_answer']
+#         gts[ques_id] = [gt]
+#         res[ques_id] = [pred]
+#     metrics_dict = compute_metrics(gts, res)
+#     print(metrics_dict)
+#     return metrics_dict

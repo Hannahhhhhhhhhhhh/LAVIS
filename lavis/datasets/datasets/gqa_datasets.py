@@ -25,6 +25,7 @@ class __DisplMixin:
                 "question": ann["question"],
                 "question_id": ann["question_id"],
                 "answers": "; ".join(ann["answer"]),
+                "fullAnswer": "; ".join(ann["fullAnswer"]),
                 "image": sample["image"],
             }
         )
@@ -44,12 +45,14 @@ class GQADataset(VQADataset, __DisplMixin):
         question = self.text_processor(ann["question"])
 
         answers = [ann["answer"]]
+        fullAnswer = [ann["fullAnswer"]]
         weights = [1]
 
         return {
             "image": image,
             "text_input": question,
             "answers": answers,
+            "fullAnswer": fullAnswer,
             "weights": weights,
         }
 
@@ -91,11 +94,18 @@ class GQAEvalDataset(VQAEvalDataset, __DisplMixin):
             answer = ann["answer"]
         else:
             answer = None
+        
+        if "fullAnswer" in ann:
+            # fullAnswer is a string
+            fullAnswer = ann["fullAnswer"]
+        else:
+            fullAnswer = None
 
         return {
             "image": image,
             "text_input": question,
             "answer": answer,
+            "fullAnswer": fullAnswer,
             "question_id": ann["question_id"],
             "instance_id": ann["instance_id"],
         }

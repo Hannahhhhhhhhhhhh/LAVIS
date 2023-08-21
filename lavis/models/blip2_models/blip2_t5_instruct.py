@@ -92,7 +92,7 @@ class Blip2T5Instruct(Blip2Base):
         t5_config = T5Config.from_pretrained(t5_model)
         t5_config.dense_act_fn = "gelu"
         self.t5_model = T5ForConditionalGeneration.from_pretrained(
-            t5_model, config=t5_config
+            t5_model, config=t5_config, use_safetensors=False
         )
 
         for name, param in self.t5_model.named_parameters():

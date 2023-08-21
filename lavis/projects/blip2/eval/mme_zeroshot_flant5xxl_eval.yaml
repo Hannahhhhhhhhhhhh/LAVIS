@@ -1,0 +1,99 @@
+ # Copyright (c) 2022, salesforce.com, inc.
+ # All rights reserved.
+ # SPDX-License-Identifier: BSD-3-Clause
+ # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+
+model:
+  arch: blip2_t5
+  model_type: pretrain_flant5xxl
+  load_pretrained: True
+  load_finetuned: False
+  vit_model: eva_clip_g
+  # intialize stage 2 pretraining from stage 1 pretrained model
+  pretrained: "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/blip2/blip2-flant5-xxl/blip2_pretrained_flant5xxl.pth"
+  
+  # vit encoder
+  image_size: 224
+  drop_path_rate: 0
+  use_grad_checkpoint: False
+  vit_precision: "fp16"
+  freeze_vit: True
+
+  # Q-Former
+  num_query_token: 32
+  freeze_qformer: True
+  qformer_text_input: False
+
+  # T5
+  t5_model: "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/google-flan-t5-xxl"
+  freeze_llm: True
+  prompt: ""
+
+  max_txt_len: 256
+  max_output_txt_len: 256
+
+
+datasets:
+  gqa: # name of the dataset builder
+    type: balanced_testdev
+    vis_processor:
+        eval:
+          name: "blip_image_eval"
+          image_size: 224
+    text_processor:
+        eval:
+          name: "blip_question"
+    build_info:
+        images:
+            storage: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/"
+
+run:
+  task: gqa
+  # optimizer
+  lr_sched: "linear_warmup_cosine_lr"
+  init_lr: 2e-5
+  min_lr: 1e-6
+  warmup_lr: 1e-6
+  log_freq: 5
+  save_freq: 1500
+
+  weight_decay: 0.05
+  max_epoch: 4
+  batch_size_train: 2
+  batch_size_eval: 1
+  num_workers: 4
+
+  # test_list: ["commonsense_reasoning_cn", "count_cn"]
+  test_list: [
+    'code_reasoning',
+    'color',
+    'commonsense_reasoning',
+    'count',
+    'existence',
+    'numerical_calculation',
+    'position',
+    'text_translation',
+  ]
+
+
+  inference_method: "generate"
+  num_beams: 1
+  max_len: 5
+  min_len: 1
+  prompt: ""
+
+  seed: 42
+  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/evaluation/BLIP2/MME/flant5xxl_zeroshot_eval_0811/"
+  result_output: "mme_result_blip2_flant5_zero_shot.csv"
+
+  amp: True
+  resume_ckpt_path: null
+
+  evaluate: False 
+  train_splits: ["train"]
+
+  device: "cuda"
+  world_size: 1
+  dist_url: "env://"
+  distributed: True
+  

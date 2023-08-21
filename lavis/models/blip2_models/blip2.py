@@ -29,7 +29,7 @@ from transformers import BertTokenizer
 class Blip2Base(BaseModel):
     @classmethod
     def init_tokenizer(cls, truncation_side="right"):
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side=truncation_side)
+        tokenizer = BertTokenizer.from_pretrained("/mnt/pfs-guan-ssai/nlu/wanghanzi/models/bert-base-uncased", truncation_side=truncation_side)
         tokenizer.add_special_tokens({"bos_token": "[DEC]"})
         return tokenizer
 
@@ -45,14 +45,14 @@ class Blip2Base(BaseModel):
 
     @classmethod
     def init_Qformer(cls, num_query_token, vision_width, cross_attention_freq=2):
-        encoder_config = BertConfig.from_pretrained("bert-base-uncased")
+        encoder_config = BertConfig.from_pretrained("/mnt/pfs-guan-ssai/nlu/wanghanzi/models/bert-base-uncased")
         encoder_config.encoder_width = vision_width
         # insert cross-attention layer every other block
         encoder_config.add_cross_attention = True
         encoder_config.cross_attention_freq = cross_attention_freq
         encoder_config.query_length = num_query_token
         Qformer = BertLMHeadModel.from_pretrained(
-            "bert-base-uncased", config=encoder_config
+            "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/bert-base-uncased", config=encoder_config
         )
         query_tokens = nn.Parameter(
             torch.zeros(1, num_query_token, encoder_config.hidden_size)
@@ -80,6 +80,9 @@ class Blip2Base(BaseModel):
             visual_encoder = create_clip_vit_L(img_size, use_grad_checkpoint, precision)
         ln_vision = LayerNorm(visual_encoder.num_features)
         self.vit_name = model_name
+        pytorch_total_params = sum(p.numel() for p in visual_encoder.parameters())
+        print(f'{model_name} clip vit params:')
+        print(f"{pytorch_total_params * 1e-9:.2} B")
         return visual_encoder, ln_vision
 
     def load_from_pretrained(self, url_or_filename):
