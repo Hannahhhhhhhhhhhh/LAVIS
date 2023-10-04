@@ -60,7 +60,7 @@ class Mlp(nn.Module):
         x = self.drop(x)
         return x
 
-
+# from visualizer import get_local # attention_visualization
 class Attention(nn.Module):
     def __init__(
             self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,
@@ -115,6 +115,8 @@ class Attention(nn.Module):
         self.proj = nn.Linear(all_head_dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
+    # attention_visualization
+    # @get_local('attn') 
     def forward(self, x, rel_pos_bias=None):
         B, N, C = x.shape
         qkv_bias = None
@@ -444,7 +446,8 @@ def create_eva_vit_g(img_size=224,drop_path_rate=0.4,use_checkpoint=False,precis
     #     url, check_hash=False, progress=True
     # )
 
-    cached_file = '/mnt/pfs-guan-ssai/nlu/dingyifeng/checkpoints/BLIP2/eva_vit_g.pth'
+    # cached_file = '/mnt/pfs-guan-ssai/nlu/dingyifeng/checkpoints/BLIP2/eva_vit_g.pth'
+    cached_file = '/mnt/pfs-guan-ssai/nlu/wanghanzi/models/eva_vit/eva_vit_g.pth'
     
     state_dict = torch.load(cached_file, map_location="cpu")    
     interpolate_pos_embed(model,state_dict)

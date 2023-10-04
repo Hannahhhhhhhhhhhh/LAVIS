@@ -1,0 +1,37 @@
+model:
+  arch: blip2
+  model_type: pretrain
+
+dataset:
+  vis_root: "/mnt/pfs-guan-ssai/nlu/dingyifeng/multimodal/MME_Benchmark_release"
+  batch_size: 16
+  test_list: [
+          'artwork.json',
+          'celebrity.json',
+          'code_reasoning.json',
+          'color.json',
+          'commonsense_reasoning.json',
+          'count.json',
+          'existence.json',
+          'landmark.json',
+          'numerical_calculation.json',
+          'OCR.json',
+          'position.json',
+          'posters.json',
+          'scene.json',
+          'text_translation.json',
+      ]
+  mme_clean: True # whether to drop instruction in the question
+
+run:
+  predict: True
+  type: "kmeans"
+  center_points_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster/llava_conver_single_turn_257k_clean_v2/kmeans/distribution_center_points.pth"
+  
+  experiment_raw_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster"
+  experiment_name: "MME_Benchmark_release_infereance_clean_0920"
+  device: 5
+
+  # text encoding config
+  re_encode: False
+  max_length: 150

@@ -1,0 +1,47 @@
+ # Copyright (c) 2022, salesforce.com, inc.
+ # All rights reserved.
+ # SPDX-License-Identifier: BSD-3-Clause
+ # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+
+model:
+  arch: blip2_t5_instruct
+  model_type: flant5xxl
+  load_finetuned: False
+  load_pretrained: True
+
+  # pretrained: "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/blip2/instruct_blip_flant5xxl/instruct_blip_flanxxl_trimmed.pth"
+  pretrained: "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/blip2/blip2-flant5-xxl/blip2_pretrained_flant5xxl.pth"
+  finetuned: ""
+
+  # vit encoder
+  image_size: 224
+  drop_path_rate: 0
+  use_grad_checkpoint: False
+  # vit_precision: "fp16"
+  vit_precision: "fp32"
+  freeze_vit: True
+
+  # Q-Former
+  num_query_token: 32
+
+  # T5
+  # t5_model: "google/flan-t5-xxl"
+  t5_model: "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/google-flan-t5-xxl"
+
+  # generation configs
+  prompt: ""
+
+
+preprocess:
+    vis_processor:
+        train:
+          name: "blip_image_train"
+          image_size: 224
+        eval:
+          name: "blip_image_eval"
+          image_size: 224
+    text_processor:
+        train:
+          name: "blip_caption"
+        eval:
+          name: "blip_caption"

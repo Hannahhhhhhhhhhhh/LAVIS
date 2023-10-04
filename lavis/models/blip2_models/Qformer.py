@@ -47,6 +47,7 @@ from transformers.models.bert.configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
+# from visualizer import get_local
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
@@ -492,6 +493,7 @@ class BertEncoder(nn.Module):
             [BertLayer(config, i) for i in range(config.num_hidden_layers)]
         )
 
+    # @get_local('all_cross_attentions')
     def forward(
         self,
         hidden_states,

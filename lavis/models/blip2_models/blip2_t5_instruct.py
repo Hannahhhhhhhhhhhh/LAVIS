@@ -40,11 +40,14 @@ class Blip2T5Instruct(Blip2Base):
     def __init__(
         self,
         vit_model="eva_clip_g",
+        q_former_model="/mnt/pfs-guan-ssai/nlu/wanghanzi/models/blip2/blip2-flant5-xxl/blip2_pretrained_flant5xxl.pth",
         img_size=224,
         drop_path_rate=0,
         use_grad_checkpoint=False,
         vit_precision="fp16",
         freeze_vit=True,
+        freeze_qformer=False,
+        freeze_t5_proj=False,
         num_query_token=32,
         t5_model="google/flan-t5-xl",
         prompt="",
@@ -62,20 +65,28 @@ class Blip2T5Instruct(Blip2Base):
 
         self.tokenizer = self.init_tokenizer(truncation_side="left")
 
+        print('Initing & Loading VIT')
         self.visual_encoder, self.ln_vision = self.init_vision_encoder(
             vit_model, img_size, drop_path_rate, use_grad_checkpoint, vit_precision
         )
+        # freeze vit
         if freeze_vit:
             for name, param in self.visual_encoder.named_parameters():
                 param.requires_grad = False
             self.visual_encoder = self.visual_encoder.eval()
             self.visual_encoder.train = disabled_train
+            # freeze ln vision
+            for name, param in self.ln_vision.named_parameters():
+                param.requires_grad = False
+            self.ln_vision = self.ln_vision.eval()
+            self.ln_vision.train = disabled_train
             logging.info("freeze vision encoder")
+        print('Loading VIT Done')
 
+        print('Initing Q-Former')
         self.Qformer, self.query_tokens = self.init_Qformer(
             num_query_token, self.visual_encoder.num_features
         )
-
         if not qformer_text_input:
             self.Qformer.bert.embeddings.word_embeddings = None
             self.Qformer.bert.embeddings.position_embeddings = None
@@ -86,6 +97,7 @@ class Blip2T5Instruct(Blip2Base):
             self.Qformer.resize_token_embeddings(len(self.tokenizer))
         self.Qformer.cls = None
 
+        print('Loading T5')
         self.t5_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side='left')
         self.t5_output_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side='right')
 
@@ -94,14 +106,36 @@ class Blip2T5Instruct(Blip2Base):
         self.t5_model = T5ForConditionalGeneration.from_pretrained(
             t5_model, config=t5_config, use_safetensors=False
         )
-
+        # freeze t5 llm 
         for name, param in self.t5_model.named_parameters():
             param.requires_grad = False
             param.data = param.data.bfloat16()
+        print('Loading T5 Done')
 
+        print("Initing t5 linear projection")
         self.t5_proj = nn.Linear(
             self.Qformer.config.hidden_size, self.t5_model.config.hidden_size
         )
+
+        # load BLIP2 Pretrain
+        print("Loading BLIP2 Parameters from :", q_former_model)
+        self.load_from_pretrained(url_or_filename=q_former_model)
+
+        # freeze qformer        
+        if freeze_qformer:
+            for name, param in self.Qformer.named_parameters():
+                param.requires_grad = False
+            self.Qformer = self.Qformer.eval()
+            self.Qformer.train = disabled_train
+            # self.query_tokens.requires_grad = False
+            logging.info("freeze Qformer")
+
+        # After loading freeze t5_proj
+        if freeze_t5_proj:
+            for name, param in self.t5_proj.named_parameters():
+                param.requires_grad = False
+            self.t5_proj = self.t5_proj.eval()
+            self.t5_proj.train = disabled_train
 
         self.max_txt_len = max_txt_len
         self.max_output_txt_len = max_output_txt_len
@@ -118,6 +152,8 @@ class Blip2T5Instruct(Blip2Base):
     def forward(self, samples):
         # print('-----------------')
         # print(samples["text_input"])
+        # print(samples.keys())
+        # print(samples)
         # print(samples["text_output"])
         # print('-----------------')
 
@@ -735,6 +771,7 @@ class Blip2T5Instruct(Blip2Base):
     @classmethod
     def from_config(cls, cfg):
         vit_model = cfg.get("vit_model", "eva_clip_g")
+        q_former_model = cfg.get("q_former_model", "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/blip2/blip2-flant5-xxl/blip2_pretrained_flant5xxl.pth")
         img_size = cfg.get("image_size")
         num_query_token = cfg.get("num_query_token")
         t5_model = cfg.get("t5_model")
@@ -743,6 +780,8 @@ class Blip2T5Instruct(Blip2Base):
         use_grad_checkpoint = cfg.get("use_grad_checkpoint", False)
         vit_precision = cfg.get("vit_precision", "fp16")
         freeze_vit = cfg.get("freeze_vit", True)
+        freeze_qformer = cfg.get("freeze_qformer", False)
+        freeze_t5_proj = cfg.get("freeze_t5_proj", True)
 
         prompt = cfg.get("prompt", "")
         max_txt_len = cfg.get("max_txt_len", 128)
@@ -758,10 +797,13 @@ class Blip2T5Instruct(Blip2Base):
         model = cls(
             vit_model=vit_model,
             img_size=img_size,
+            q_former_model=q_former_model,
             drop_path_rate=drop_path_rate,
             use_grad_checkpoint=use_grad_checkpoint,
             vit_precision=vit_precision,
             freeze_vit=freeze_vit,
+            freeze_qformer=freeze_qformer,
+            freeze_t5_proj=freeze_t5_proj,
             num_query_token=num_query_token,
             t5_model=t5_model,
             prompt=prompt,
@@ -780,5 +822,11 @@ class Blip2T5Instruct(Blip2Base):
         #     )
 
         model.load_checkpoint_from_config(cfg)
+        
+        # check update params
+        print("Updating following parameters:")
+        for name, param in model.named_parameters():
+            if param.requires_grad == True:
+                print(name)
 
         return model

@@ -138,6 +138,7 @@ class Blip2VicunaInstruct(Blip2Base):
 
     def forward(self, samples):
         # print('-----------------')
+        print(sample)
         # print(samples["text_input"])
         # print(samples["text_output"])
         # print('-----------------')

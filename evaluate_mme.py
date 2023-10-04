@@ -2,46 +2,30 @@
 
 # import torch
 # import lavis.tasks as tasks
-# from lavis.common.config import Config
-
 import argparse
 import random
-
+import os
 import numpy as np
+import json
+from PIL import Image
+import pandas as pd
+from tqdm import tqdm
+from omegaconf import OmegaConf
+
 import torch
 import torch.backends.cudnn as cudnn
+from torch.utils.data import Dataset, DataLoader
 
 import lavis.tasks as tasks
 from lavis.common.config import Config
 from lavis.common.dist_utils import get_rank, init_distributed_mode
-from lavis.common.logger import setup_logger
-from lavis.common.optims import (
-    LinearWarmupCosineLRScheduler,
-    LinearWarmupStepLRScheduler,
-)
-from lavis.common.utils import now
-
-# imports modules for registration
 from lavis.datasets.builders import *
 from lavis.models import *
 from lavis.processors import *
 from lavis.runners.runner_base import RunnerBase
 from lavis.tasks import *
-
-from PIL import Image
-import os
-import json
-from IPython.display import Image as disImage
-from IPython.display import display
-
-
-from omegaconf import OmegaConf
 from lavis.models import load_preprocess
 
-from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
-
-import pandas as pd
 # torch.cuda.set_device("cuda:6")
 
 MME_ROOT = "/mnt/pfs-guan-ssai/nlu/dingyifeng/multimodal/MME_Benchmark_release"
@@ -154,14 +138,14 @@ def create_dataloader(ann_path, vis_processors, cfg):
 
 
 @torch.no_grad()
-def evaluate_split(model, cfg, dataloader, output_path, test_split):
+def evaluate_split(model, cfg, dataloader, output_path, test_split, device):
     image_names = []
     questions = []
     labels = []
     predictions = []
     t = 0
     for sample in tqdm(dataloader, desc=test_split):
-        sample['image'] = sample['image'].cuda()
+        sample['image'] = sample['image'].to(device)
         sample['t'] = t
         if t == 0:
             print(sample['text_input'])
@@ -205,6 +189,7 @@ def evaluate_split(model, cfg, dataloader, output_path, test_split):
 
 
 def analyze_mme_result(saved_path, mme_test_list, result_file):
+
     df_dict, result_dict = dict(), dict()
     for mme_test in mme_test_list:
         data_lst = list()
@@ -213,18 +198,18 @@ def analyze_mme_result(saved_path, mme_test_list, result_file):
                 data = eval(line.strip())
                 data_lst.append(data)
         df = pd.DataFrame(data_lst)
-        
-        df_tmp = df.groupby('image').sum('judge')
-        df_acc = df_tmp[df_tmp['judge']==2]
-        acc_plus = df_acc.shape[0]/ df_tmp.shape[0] * 100
+
+        # df_tmp = df.groupby('image').sum('judge')
+        # df_acc = df_tmp[df_tmp['judge']==2]
+        # acc_plus = df_acc.shape[0]/ df_tmp.shape[0] * 100
         # 有时候pred是一句话，取第一个单词与label判断
         df['new_judge'] = [1 if df['label'][i][0]==df['pred'][i][0] else 0 for i in range(df.shape[0])] 
 
         df_tmp = df.groupby('image').sum('new_judge')
         df_acc = df_tmp[df_tmp['new_judge']==2]
         acc_plus = df_acc.shape[0]/ df_tmp.shape[0] * 100
-        acc = df['judge'].sum()/len(df['new_judge']) * 100
-        
+        acc = df['new_judge'].sum()/len(df['new_judge']) * 100
+
         result = {
             "Accurate" : df['new_judge'].sum(),
             "Accurate_both" : df_acc.shape[0],
@@ -233,14 +218,21 @@ def analyze_mme_result(saved_path, mme_test_list, result_file):
             "Accuracy+" : acc_plus,
             "Accuracy_final" : acc +acc_plus
         }
-        print(mme_test, " : ", result,'\n')
+        print(mme_test, " : ", result)
         df_dict[mme_test] = df
         result_dict[mme_test] = result
-   
-    pd.DataFrame(result_dict).to_csv(result_file)
+
+    df_output = pd.DataFrame(result_dict).T
+    order = ['existence','count','position','color','OCR','posters','celebrity','scene','landmark','artwork','commonsense_reasoning','numerical_calculation','text_translation','code_reasoning']
+    df_final = df_output.loc[order]
+    df_final.to_csv(result_file)
+
+    perception_score = df_final['Accuracy_final'][:10].sum()
+    cognition_score = df_final['Accuracy_final'][10:].sum()
+    print(f"Perception Score: {perception_score}; Cognition Score: {cognition_score}")
 
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 
     # init
     cfg = Config(parse_args())
@@ -279,7 +271,7 @@ def main():
         ann_path = os.path.join(MME_ROOT, ann_path)
         dataloader = create_dataloader(ann_path, vis_processors, cfg)
 
-        evaluate_split(model, cfg, dataloader, output_path, test_split)
+        evaluate_split(model, cfg, dataloader, output_path, test_split, device)
 
     # analyze the result of mme
     result_file = cfg.config.run.output_dir + cfg.config.run.result_output
@@ -289,5 +281,5 @@ if __name__ == '__main__':
     main()
 
     # lavis/projects/blip2/eval/mme_zeroshot_flant5xxl_eval.yaml
-
+    # lavis/projects/blip2/eval/gqa_sft_eval/mme_gqa_sft_flant5xxl_eval_0924.yaml
 

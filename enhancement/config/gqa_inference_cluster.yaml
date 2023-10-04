@@ -1,0 +1,21 @@
+model:
+  arch: blip2
+  model_type: pretrain
+
+dataset:
+  ann_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/testdev_balanced_questions.json"
+  vis_root: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/"
+  batch_size: 16
+
+run:
+  predict: True
+  type: "kmeans"
+  center_points_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster/llava_conver_single_turn_257k_clean_v2/kmeans/distribution_center_points.pth"
+  
+  experiment_raw_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster"
+  experiment_name: "gqa_testdev_balanced_questions_infereance_0917"
+  device: 5
+
+  # text encoding config
+  re_encode: False
+  max_length: 150

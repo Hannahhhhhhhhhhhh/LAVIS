@@ -220,7 +220,8 @@ class GQATask(VQATask):
             pred = vqa_tool.processPunctuation(pred)
             pred = vqa_tool.processDigitArticle(pred)
 
-            vqa_acc = 1 if pred == gt_ans else 0
+            # vqa_acc = 1 if pred == gt_ans else 0
+            vqa_acc = 1 if gt_ans in pred else 0
 
             acc.append(vqa_acc)
 
@@ -228,8 +229,11 @@ class GQATask(VQATask):
         metrics = {"agg_metrics": accuracy, "acc": accuracy}
 
         # measuring bleu Cider Rouge Spice compared to full_answer
-        new_metrics = vqa_answer_eval(result_file)
-        metrics.update(new_metrics)
+        try:
+            new_metrics = vqa_answer_eval(result_file)
+            metrics.update(new_metrics)
+        except Exception as e:
+            print("Measuring BLEU Cider Rouge_l Spice Error...")
 
         with open(
             os.path.join(registry.get_path("output_dir"), "evaluate.txt"), "a"

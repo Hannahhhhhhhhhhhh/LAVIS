@@ -26,7 +26,6 @@ model:
 
   # T5
   t5_model: "/mnt/pfs-guan-ssai/nlu/wanghanzi/models/google-flan-t5-xxl"
-  freeze_llm: True
   prompt: ""
 
   max_txt_len: 256

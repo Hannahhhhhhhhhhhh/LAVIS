@@ -1,0 +1,34 @@
+model:
+  arch: blip2
+  model_type: pretrain
+# LAVIS/lavis/models/blip2_models/blip2_qformer.py
+
+dataset:
+  sft_data_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/LrvInstruction/processed/lrvinstruction_152k_filtered_shorter_150_ids.json"
+  batch_size: 16
+
+run:
+  train: True
+  predict: True
+
+  experiment_raw_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster"
+  device: 3
+
+  # text encoding config
+  re_encode: False
+  max_length: 150
+
+  # k-means cluster config
+  # type: "kmeans"
+  # num_clusters: 5
+  # distance: 'euclidean'
+  # distance: 'cosine'
+
+  # agnes cluster config
+  type: "agnes"
+  linkage: "ward" #  'complete', 'average', 'single'
+  # distance_threshold: 12
+  n_clusters: 5
+
+  # metrics
+  metrics: "silhouette_score"

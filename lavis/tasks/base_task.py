@@ -10,10 +10,12 @@ import os
 
 import torch
 import torch.distributed as dist
-from lavis.common.dist_utils import get_rank, get_world_size, is_main_process, is_dist_avail_and_initialized
+from lavis.common.dist_utils import get_rank, get_world_size, is_main_process, is_dist_avail_and_initialized, main_process
 from lavis.common.logger import MetricLogger, SmoothedValue
 from lavis.common.registry import registry
 from lavis.datasets.data_utils import prepare_sample
+from torch.utils.tensorboard import SummaryWriter
+from lavis.runners.runner_base import RunnerBase
 
 
 class BaseTask:
@@ -31,6 +33,20 @@ class BaseTask:
 
         model_cls = registry.get_model_class(model_config.arch)
         return model_cls.from_config(model_config)
+    
+    def build_tensorboard(self, cfg):
+        """
+        Build a tensorboard monitoring the global training process.
+        """
+        setattr(self, 'writer', None)
+        if is_main_process():
+            writer = SummaryWriter(log_dir=cfg.run_cfg.output_dir)
+            setattr(self, 'writer', writer)
+
+        if is_dist_avail_and_initialized():
+            dist.barrier()
+        
+        return None
 
     def build_datasets(self, cfg):
         """
@@ -59,6 +75,9 @@ class BaseTask:
             datasets[name] = dataset
 
         return datasets
+
+    def combine_runner(self, runner: RunnerBase):
+        setattr(self, 'runner', runner)
 
     def train_step(self, model, samples):
         output = model(samples)
@@ -113,6 +132,7 @@ class BaseTask:
         cuda_enabled=False,
         log_freq=50,
         accum_grad_iters=1,
+        save_freq=-1,
     ):
         return self._train_inner_loop(
             epoch=epoch,
@@ -125,6 +145,7 @@ class BaseTask:
             log_freq=log_freq,
             cuda_enabled=cuda_enabled,
             accum_grad_iters=accum_grad_iters,
+            save_freq=save_freq,
         )
 
     def train_iters(
@@ -140,6 +161,7 @@ class BaseTask:
         cuda_enabled=False,
         log_freq=50,
         accum_grad_iters=1,
+        save_freq=-1,
     ):
         return self._train_inner_loop(
             epoch=epoch,
@@ -153,6 +175,7 @@ class BaseTask:
             log_freq=log_freq,
             cuda_enabled=cuda_enabled,
             accum_grad_iters=accum_grad_iters,
+            save_freq=save_freq,
         )
 
     def _train_inner_loop(
@@ -168,6 +191,7 @@ class BaseTask:
         log_freq=50,
         cuda_enabled=False,
         accum_grad_iters=1,
+        save_freq=-1,
     ):
         """
         An inner training loop compatible with both epoch-based and iter-based training.
@@ -195,11 +219,13 @@ class BaseTask:
         if start_iters is None:
             # epoch-based runner
             inner_epoch = epoch
+            start_iters = epoch * iters_per_epoch
         else:
             # In iter-based runner, we schedule the learning rate based on iterations.
             inner_epoch = start_iters // iters_per_epoch
             header = header + "; inner epoch [{}]".format(inner_epoch)
 
+        print(f"start_iters: {start_iters}")
         for i in metric_logger.log_every(range(iters_per_epoch), log_freq, header):
             # if using iter-based runner, we stop after iters_per_epoch iterations.
             if i >= iters_per_epoch:
@@ -239,6 +265,12 @@ class BaseTask:
 
             metric_logger.update(**loss_dict)
             metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+            if (start_iters + i + 1) % log_freq == 0:
+                self.update_writer(metric_logger, start_iters+i+1)
+            
+            if save_freq != -1 and (start_iters + i + 1) % save_freq == 0:
+                self.runner._save_checkpoint(start_iters+i+1, is_best=False)
 
         # after train_epoch()
         # gather the stats from all processes
@@ -288,3 +320,9 @@ class BaseTask:
             print("result file saved to %s" % final_result_file)
 
         return final_result_file
+
+    @main_process
+    def update_writer(self, metric_logger, iter_num):
+        for name, meter in metric_logger.meters.items():
+            # meter: Instance of class SmoothedValue 
+            self.writer.add_scalar(name, float(str(meter)), iter_num)

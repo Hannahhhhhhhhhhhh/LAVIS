@@ -11,8 +11,10 @@ datasets:
     build_info:
       annotations:
         train:
-          url: /mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_500k.json
-          storage: /mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_500k.json
+          # url: /mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_500k.json
+          url: /mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_257k_clean.json
+          # storage: /mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_500k.json
+          storage: /mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_257k_clean.json
           # storage: /mnt/pfs-guan-ssai/nlu/dingyifeng/data/multimodal-sft/llava_150k/zh/llava_instruct_150k_zh_lisft_history.json
           # storage: /mnt/pfs-guan-ssai/nlu/dingyifeng/data/multimodal-sft/llava_150k/zh/llava_instruct_150k_zh_mapped.json
       images:

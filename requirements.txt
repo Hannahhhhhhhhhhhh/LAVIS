@@ -27,3 +27,6 @@ tqdm
 transformers>=4.28.0
 webdataset
 wheel
+visualizer
+tensorboard
+kmeans_pytorch

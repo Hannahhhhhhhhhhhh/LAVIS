@@ -54,5 +54,13 @@ class GQABuilder(BaseDatasetBuilder):
     DATASET_CONFIG_DICT = {
         "default": "configs/datasets/gqa/defaults.yaml",
         "balanced_val": "configs/datasets/gqa/balanced_val.yaml",
+        # testdev
         "balanced_testdev": "configs/datasets/gqa/balanced_testdev.yaml",
+        "balanced_testdev_ques_prompt": "configs/datasets/gqa/balanced_testdev_ques_prompt.yaml",
+        "balanced_testdev_ques_type_prompt": "configs/datasets/gqa/balanced_testdev_ques_type_prompt.yaml",
+        "balanced_testdev_type_prompt": "configs/datasets/gqa/balanced_testdev_type_prompt.yaml",
+        # sft
+        "balanced_sft_ques_prompt": "configs/datasets/gqa/balanced_sft_ques_prompt.yaml",
+        "balanced_sft_ques_type_prompt": "configs/datasets/gqa/balanced_sft_ques_type_prompt.yaml",
+        "balanced_sft_type_prompt": "configs/datasets/gqa/balanced_sft_type_prompt.yaml",
     }

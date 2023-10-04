@@ -5,6 +5,8 @@
 
 model:
   arch: pretrain_flant5xxl
+  # arch: blip2_t5
+  # model_type: pretrain_flant5xxl
   load_finetuned: False
 
   # pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_flant5xxl.pth"

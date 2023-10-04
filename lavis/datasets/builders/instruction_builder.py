@@ -17,7 +17,20 @@ class LlavaEnBuilder(BaseDatasetBuilder):
 class LlavaEnSftBuilder(BaseDatasetBuilder):
     train_dataset_cls = LlavaSftInstructionDataset
     eval_dataset_cls = LlavaSftInstructionDataset
-
     DATASET_CONFIG_DICT = {"default": "configs/datasets/llava/defaults_150k_en_sft.yaml"}
+
+@registry.register_builder("llava_150k_en_sft_singleturn")
+class LlavaEnSftBuilderSingleTurn(BaseDatasetBuilder):
+    train_dataset_cls = LlavaSftInstructionDataset
+    eval_dataset_cls = LlavaSftInstructionDataset
+    DATASET_CONFIG_DICT = {"default": "configs/datasets/llava/defaults_150k_en_sft_singleturn.yaml"}
+
+@registry.register_builder("llava_150k_en_sft_singleturn_cluster")
+class LlavaEnSftBuilderSingleTurnCluster(BaseDatasetBuilder):
+    train_dataset_cls = LlavaSftInstructionDataset
+    eval_dataset_cls = LlavaSftInstructionDataset
+    DATASET_CONFIG_DICT = {
+        "default": "configs/datasets/llava/defaults_150k_en_sft_singleturn_cluster.yaml"
+        }
 
 

@@ -1,0 +1,17 @@
+ # Copyright (c) 2022, salesforce.com, inc.
+ # All rights reserved.
+ # SPDX-License-Identifier: BSD-3-Clause
+ # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+
+datasets:
+  llava_150k_en_sft_singleturn_cluster:
+    # data_dir: ${env.data_dir}/datasets
+    data_type: images
+
+    build_info:
+      annotations:
+        train:
+          url: /mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster/llava_conver_single_turn_257k_clean_v2/kmeans/split_samples/0_cluster.json
+          storage: /mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster/llava_conver_single_turn_257k_clean_v2/kmeans/split_samples/0_cluster.json
+      images:
+          storage: /mnt/pfs-guan-ssai/nlu/dingyifeng/data/COCO

@@ -1,0 +1,32 @@
+model:
+  arch: blip2
+  model_type: pretrain
+
+dataset:
+  sft_data_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/multimodal-sft/llava_150k/en/llava_conver_single_turn_257k_clean_v2.json"
+  batch_size: 16
+
+run:
+  train: True
+  predict: True
+
+  experiment_raw_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/cluster"
+  device: 5
+
+  # text encoding config
+  re_encode: False
+  max_length: 150
+
+  # k-means cluster config
+  type: "kmeans"
+  num_clusters: 5
+  distance: 'euclidean'
+
+  # agnes cluster config
+  # type: "agnes"
+  # linkage: "ward" #  'complete', 'average', 'single'
+  # distance_threshold: 12
+  # n_clusters: 5
+
+  # metrics
+  metrics: "silhouette_score"
