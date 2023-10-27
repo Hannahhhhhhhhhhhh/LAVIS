@@ -30,19 +30,19 @@ from lavis.models import load_preprocess
 
 MME_ROOT = "/mnt/pfs-guan-ssai/nlu/dingyifeng/multimodal/MME_Benchmark_release"
 SPLIT_LIST = [
-    'artwork.json',
-    'celebrity.json',
-    'code_reasoning.json',
-    'color.json',
-    'commonsense_reasoning.json',
-    'count.json',
-    'existence.json',
-    'landmark.json',
-    'numerical_calculation.json',
-    'OCR.json',
-    'position.json',
-    'posters.json',
-    'scene.json',
+    'artwork.json', #100
+    'celebrity.json', # 85
+    'code_reasoning.json', # 10
+    'color.json', # 15
+    'commonsense_reasoning.json', # 35
+    'count.json', # 15
+    'existence.json', # 15
+    'landmark.json', # 10
+    'numerical_calculation.json', # 10
+    'OCR.json', # 10
+    'position.json', # 15
+    'posters.json', # 74
+    'scene.json', # 100
     'text_translation.json',
 ]
 
@@ -232,7 +232,8 @@ def analyze_mme_result(saved_path, mme_test_list, result_file):
     print(f"Perception Score: {perception_score}; Cognition Score: {cognition_score}")
 
 def main():
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+    print(device)
 
     # init
     cfg = Config(parse_args())
@@ -253,10 +254,10 @@ def main():
 
 
     # test one piece
-    raw_image = Image.open("docs/_static/merlion.png").convert("RGB")
-    image = vis_processors["eval"](raw_image).unsqueeze(0).to(device)
-    caption = model.generate({"image": image})
-    print(caption)
+    # raw_image = Image.open("docs/_static/merlion.png").convert("RGB")
+    # image = vis_processors["eval"](raw_image).unsqueeze(0).to(device)
+    # caption = model.generate({"image": image})
+    # print(caption)
 
     # test_list = cfg.config.run.test_list
     test_list = list(SPLIT_MAP.keys())
@@ -282,4 +283,4 @@ if __name__ == '__main__':
 
     # lavis/projects/blip2/eval/mme_zeroshot_flant5xxl_eval.yaml
     # lavis/projects/blip2/eval/gqa_sft_eval/mme_gqa_sft_flant5xxl_eval_0924.yaml
-
+    # lavis/projects/blip2/eval/prompt_moe_eval/mme_llava_prompt_flant5xxl_eval_1007.yaml

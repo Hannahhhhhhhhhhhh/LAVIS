@@ -15,12 +15,12 @@ datasets:
           url:
               - https://storage.googleapis.com/sfr-vision-language-research/LAVIS/datasets/gqa/train_balanced_questions.json
           storage:
-              - /mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/sft/part_500/train_balanced_sft_type_prompt.json
+              - /mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/train_balanced_questions_100k.json
         val:
           url:
             - https://storage.googleapis.com/sfr-vision-language-research/LAVIS/datasets/gqa/testdev_balanced_questions.json
           storage:
-            - /mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA//testdev_balanced_sft_type_prompt.json
+            - /mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/testdev_balanced_questions.json
         test:
           url:
               - https://storage.googleapis.com/sfr-vision-language-research/LAVIS/datasets/gqa/test_balanced_questions.json

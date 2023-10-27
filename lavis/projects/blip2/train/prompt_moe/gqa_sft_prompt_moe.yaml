@@ -4,7 +4,7 @@
  # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 
 model:
-  arch: blip2_t5_instruct
+  arch: blip2_t5_instruct_pro_moe
   model_type: flant5xxl
   load_pretrained: True
   load_finetuned: False
@@ -28,9 +28,18 @@ model:
   max_output_txt_len: 256
 
   # freeze
-  freeze_t5_proj: False
   freeze_vit: True
+  freeze_llm: True
   freeze_qformer: False
+  freeze_t5_proj: False
+
+  # moe
+  repeat_to_init_qt_candidates: True
+  num_qt_candidates: 5
+  moe_topk: 1
+  eval_gate_save: True
+  train_gate_save: True
+  gate_save_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_train_qf_train_qt_linear_gate_textt5_5ex_top1_3loss_textinqf_epo3_1016_gate/"
 
 datasets:
   gqa:
@@ -51,8 +60,10 @@ datasets:
       images:
         storage: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/"
     
+
 run:
   task: instruction_tuning
+  # optimizer
   lr_sched: "linear_warmup_cosine_lr"
   init_lr: 2e-5
   min_lr: 1e-6
@@ -62,14 +73,14 @@ run:
 
   weight_decay: 0.05
   max_epoch: 3
-  batch_size_train: 16
-  batch_size_eval: 32
+  batch_size_train: 8
+  batch_size_eval: 16
   num_workers: 4
   warmup_steps: 600
 
   seed: 42
-  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/sft/gqa_500_sft_type_prompt_train_qf_train_qt_textinqf_epo3_1003/"
-
+  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_train_qf_train_qt_linear_gate_textt5_5ex_top1_3loss_textinqf_epo3_1016/"
+  
   amp: True
   resume_ckpt_path: null
 

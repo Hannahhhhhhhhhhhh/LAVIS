@@ -22,6 +22,7 @@ class __DisplMixin:
         return OrderedDict(
             {
                 "file": ann["image"],
+                "image_id": ann["image"],
                 "question": ann["question"],
                 "question_id": ann["question_id"],
                 "answers": "; ".join(ann["answer"]),
@@ -52,6 +53,7 @@ class GQADataset(VQADataset, __DisplMixin):
 
         return {
             "image": image,
+            'image_id': ann["image"],
             "text_input": question,
             "answers": answers,
             "fullAnswer": fullAnswer,

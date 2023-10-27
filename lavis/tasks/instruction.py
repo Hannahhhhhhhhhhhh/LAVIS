@@ -47,7 +47,7 @@ class InstructionTask(BaseTask):
         run_cfg = cfg.run_cfg
 
         num_beams = run_cfg.get("num_beams", 3)
-        max_len = run_cfg.get("max_len", 10)
+        max_len = run_cfg.get("max_len", 20)
         min_len = run_cfg.get("min_len", 1)
 
         evaluate = run_cfg.get("evaluate", False)

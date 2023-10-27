@@ -17,7 +17,6 @@ from typing import Optional, Tuple, Dict, Any
 import torch
 from torch import Tensor, device, dtype, nn
 import torch.utils.checkpoint
-from torch import nn
 from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 
@@ -121,17 +120,17 @@ class BertSelfAttention(nn.Module):
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.num_attention_heads = config.num_attention_heads # 12
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads) # 64
+        self.all_head_size = self.num_attention_heads * self.attention_head_size # 768
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size) # nn.Linear(768, 768)
         if is_cross_attention:
-            self.key = nn.Linear(config.encoder_width, self.all_head_size)
-            self.value = nn.Linear(config.encoder_width, self.all_head_size)
+            self.key = nn.Linear(config.encoder_width, self.all_head_size) # nn.Linear(1408, 768)
+            self.value = nn.Linear(config.encoder_width, self.all_head_size) # nn.Linear(1408, 768)
         else:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.hidden_size, self.all_head_size)
+            self.key = nn.Linear(config.hidden_size, self.all_head_size) # nn.Linear(768, 768)
+            self.value = nn.Linear(config.hidden_size, self.all_head_size) # nn.Linear(768, 768)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(
@@ -163,7 +162,7 @@ class BertSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (
             self.num_attention_heads,
             self.attention_head_size,
-        )
+        ) # torch.Size([1, 257, 12, 64])
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -184,8 +183,8 @@ class BertSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
 
         if is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states)) # encoder_hidden_states:[bz,257,1408], torch.Size([1, 12, 257, 64])
+            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states)) # torch.Size([1, 12, 257, 64])
             attention_mask = encoder_attention_mask
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -198,9 +197,9 @@ class BertSelfAttention(nn.Module):
 
         mixed_query_layer = self.query(hidden_states)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.transpose_for_scores(mixed_query_layer) # torch.Size([1, 12, 41, 64])
 
-        past_key_value = (key_layer, value_layer)
+        past_key_value = (key_layer, value_layer) # torch.Size([1, 12, 41, 257])
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -256,17 +255,17 @@ class BertSelfAttention(nn.Module):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_dropped = self.dropout(attention_probs)
+        attention_probs_dropped = self.dropout(attention_probs) # torch.Size([1, 12, 41, 257])
 
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs_dropped = attention_probs_dropped * head_mask
 
-        context_layer = torch.matmul(attention_probs_dropped, value_layer)
+        context_layer = torch.matmul(attention_probs_dropped, value_layer) # torch.Size([1, 12, 41, 64])
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(*new_context_layer_shape) # torch.Size([1, 41, 768])
 
         outputs = (
             (context_layer, attention_probs) if output_attentions else (context_layer,)
@@ -362,7 +361,7 @@ class BertIntermediate(nn.Module):
         return hidden_states
 
 
-class BertOutput(nn.Module):
+class BertOutput(nn.Module): # Add & Norm
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -376,7 +375,7 @@ class BertOutput(nn.Module):
         return hidden_states
 
 
-class BertLayer(nn.Module):
+class BertLayer(nn.Module): 
     def __init__(self, config, layer_num):
         super().__init__()
         self.config = config

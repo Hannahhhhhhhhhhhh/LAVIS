@@ -227,7 +227,8 @@ class GQATask(VQATask):
 
         accuracy = sum(acc) / len(acc) * 100
         metrics = {"agg_metrics": accuracy, "acc": accuracy}
-
+        print(metrics)
+        
         # measuring bleu Cider Rouge Spice compared to full_answer
         try:
             new_metrics = vqa_answer_eval(result_file)

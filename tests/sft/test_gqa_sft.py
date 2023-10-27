@@ -85,7 +85,11 @@ def forward(dataloader, device, model):
         batch['text_input'] = [text for text in batch['text_input']]        
         predict = model.predict_answers(batch)[0]
         print(predict)
-        print(batch['text_input'], batch['text_output'])
+        print(batch['text_input'], batch['text_output'], batch['image_id'])
+        break
+def test_dataloader(dataloader):
+    for batch in dataloader:
+        print(batch['text_input'], batch['text_output'], batch['image_id'])
         break
 
 def main():
@@ -99,15 +103,16 @@ def main():
     preprocess_cfg = cfg.config.preprocess
     vis_processors, txt_processors = load_preprocess(preprocess_cfg)
     dataset, dataloader = create_dataloader(cfg, vis_processors,txt_processors, batch_size=1)
+    test_dataloader(dataloader)
 
     # load model & setup task
-    task = tasks.setup_task(cfg)
-    datasets = task.build_datasets(cfg)
-    print(datasets)
-    model = task.build_model(cfg).to(device)
-    model.eval()
+    # task = tasks.setup_task(cfg)
+    # datasets = task.build_datasets(cfg)
+    # print(datasets)
+    # model = task.build_model(cfg).to(device)
+    # model.eval()
 
-    forward(dataloader, device, model)
+    # forward(dataloader, device, model)
 
 if __name__ == '__main__':
     main()

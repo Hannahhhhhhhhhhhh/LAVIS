@@ -109,4 +109,40 @@ class LlavaSftInstructionDataset(BaseDataset, __DisplMixin):
         text_input = ann['text_input']
         text_output = ann['text_output']
 
-        return {"image": image, "text_input": text_input, "text_output": text_output}
+        return {"image": image, "text_input": text_input, "text_output": text_output, "image_id": ann['image']}
+
+
+class LlavaSftInstructionEvalDataset(BaseDataset, __DisplMixin):
+    def __init__(self, vis_processor, text_processor, vis_root, ann_paths):
+        """
+        vis_root (string): Root directory of images (e.g. coco/images/)
+        ann_root (string): directory to store the annotation file
+        """
+        super().__init__(vis_processor, text_processor, vis_root, ann_paths)
+
+    def __getitem__(self, index):
+
+        # TODO this assumes image input, not general enough
+        ann = self.annotation[index]
+
+        if "COCO" in ann["image"]: # coco images
+            image_path = os.path.join(self.vis_root, ann["image"])
+            text_input = ann['text_input']
+            text_output = ann['text_output']
+        else: # gqa images
+            image_path = os.path.join("/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/", ann["image"])
+            text_input = ann["question"]
+            text_output =  ann["fullAnswer"]
+
+        image = Image.open(image_path).convert("RGB")
+        image = self.vis_processor(image)
+        return {
+            "image": image,
+            "image_id": ann["image"],
+            "text_input": text_input,
+            "answer": ann.get("answer",""),
+            "fullAnswer": ann.get("fullAnswer",""),
+            "text_output": text_output,
+            "question_id": ann.get("question_id",""),
+            "instance_id": ann.get("instance_id",""),
+        }

@@ -51,26 +51,26 @@ SPLIT_MAP = {
     split.split('.')[0]: split for split in SPLIT_LIST
 }
 # version 1
-# SFT_PATH = "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/sft/"
-# CLUSTER_CKPT = {
-#     'cluster_0':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0906_cluster0/20230906203/checkpoint_2.pth',
-#     'cluster_1':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0906_cluster1/20230906231/checkpoint_2.pth',
-#     'cluster_2':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0907_cluster2/20230907112/checkpoint_2.pth',
-#     'cluster_3':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0907_cluster3/20230907135/checkpoint_2.pth',
-#     'cluster_4':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0907_cluster4/20230907150/checkpoint_2.pth'
-# }
+SFT_PATH = "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/sft/"
+CLUSTER_CKPT = {
+    'cluster_0':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0906_cluster0/20230906203/checkpoint_2.pth',
+    'cluster_1':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0906_cluster1/20230906231/checkpoint_2.pth',
+    'cluster_2':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0907_cluster2/20230907112/checkpoint_2.pth',
+    'cluster_3':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0907_cluster3/20230907135/checkpoint_2.pth',
+    'cluster_4':SFT_PATH + 'llava_single_turn_257k_sft_freeze_qf_train_qt_textinqf_epo3_0907_cluster4/20230907150/checkpoint_2.pth'
+}
 
 CLUSTER_NUM = 5
 
 # version 2
-SFT_PATH = "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/sft/llava_st_257k_clean_k_means_5_train_cluster_0915/"
-CLUSTER_CKPT = {
-    'cluster_0': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster0/20230918192/checkpoint_2.pth",
-    'cluster_1': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster1/20230915211/checkpoint_2.pth",
-    'cluster_2': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster2/20230915193/checkpoint_2.pth",
-    'cluster_3': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster3/20230915213/checkpoint_2.pth",
-    'cluster_4': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster4/20230915220/checkpoint_2.pth",
-}
+# SFT_PATH = "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/sft/llava_st_257k_clean_k_means_5_train_cluster_0915/"
+# CLUSTER_CKPT = {
+#     'cluster_0': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster0/20230918192/checkpoint_2.pth",
+#     'cluster_1': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster1/20230915211/checkpoint_2.pth",
+#     'cluster_2': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster2/20230915193/checkpoint_2.pth",
+#     'cluster_3': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster3/20230915213/checkpoint_2.pth",
+#     'cluster_4': SFT_PATH + "freeze_qf_train_qt_textinqf_epo3_cluster4/20230915220/checkpoint_2.pth",
+# }
 
 
 def setup_seeds(config):

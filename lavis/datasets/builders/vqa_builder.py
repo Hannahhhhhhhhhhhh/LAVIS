@@ -63,4 +63,6 @@ class GQABuilder(BaseDatasetBuilder):
         "balanced_sft_ques_prompt": "configs/datasets/gqa/balanced_sft_ques_prompt.yaml",
         "balanced_sft_ques_type_prompt": "configs/datasets/gqa/balanced_sft_ques_type_prompt.yaml",
         "balanced_sft_type_prompt": "configs/datasets/gqa/balanced_sft_type_prompt.yaml",
+        "balanced_sft_raw": "configs/datasets/gqa/balanced_sft_raw.yaml",
+        "balanced_sft_raw_100k": "configs/datasets/gqa/balanced_sft_raw_100k.yaml",
     }

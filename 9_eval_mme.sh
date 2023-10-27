@@ -1,7 +1,7 @@
 #!/bin/bash
 # remember to adjust output_dir!!!
 
-# lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/9_eval_mme.sh" -n 1 -j test-blip2-lavis-mme-2  -t all -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
+# lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/9_eval_mme.sh" -n 1 -j test-blip2-lavis-mme-2  -t nvidia-a800-sxm4-80gb -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
 
 PROJECT_PATH=/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS
 cd ${PROJECT_PATH}
