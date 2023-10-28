@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# start: lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/2_sft_gqa_blip2_gqa_train_sft_raw_1017.sh" -n 1 -j blip2-gqa-100k-raw-1017  -t nvidia-a800-sxm4-80gb  -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
+# start: lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/3_prompt_moe_ft_gqa_st_blip2_b2embed_20expert_top2_3loss.sh" -n 1 -j blip2-moe-gqa-20ex-1021  -t nvidia-a800-sxm4-80gb -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
 # PATH_ORI=${0%/*}
 # PROJECT_PATH=$(echo ${PATH_ORI} | sed -r 's/\/{2,}/\//')
 # echo "========"
@@ -68,15 +68,17 @@ model:
   freeze_t5_proj: False
 
   # moe
+  embed_extract: "blip2_pretrain" # t5
   repeat_to_init_qt_candidates: True
-  num_qt_candidates: 1
-  moe_topk: 1
-  eval_gate_save: False
-  train_gate_save: False
+  num_qt_candidates: 20
+  moe_topk: 2
+  eval_gate_save: True
+  train_gate_save: True
+  gate_save_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_train_qf_train_qt_linear_gate_textblip2_20ex_top2_3loss_textinqf_epo3_1021/"
 
 datasets:
   gqa:
-    type: balanced_sft_raw_100k
+    type: balanced_sft_raw
     vis_processor:
       train:
         name: "blip_image_train"
@@ -93,6 +95,7 @@ datasets:
       images:
         storage: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/"
     
+
 run:
   task: instruction_tuning
   # optimizer
@@ -111,8 +114,8 @@ run:
   warmup_steps: 600
 
   seed: 42
-  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_100k_raw_train_qf_train_qt_linear_top1_1ex_textinqf_epo3_1017/"
-
+  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_train_qf_train_qt_linear_gate_textblip2_20ex_top2_3loss_textinqf_epo3_1021/"
+  
   amp: True
   resume_ckpt_path: null
 

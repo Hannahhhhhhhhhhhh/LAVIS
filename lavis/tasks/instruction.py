@@ -119,10 +119,10 @@ class InstructionTask(BaseTask):
         vqa_tool = VQAEval()
 
         for res in results:
-            if res["gt_ans"] is None:
+            # if res["gt_ans"] is None:
                 # prepare test results for leaderboard evaluation
-                self._save_result_leaderboard(results)
-                return
+                # self._save_result_leaderboard(results)
+                # return
 
             gt_ans = res["gt_ans"]
             pred = res["pred_ans"]

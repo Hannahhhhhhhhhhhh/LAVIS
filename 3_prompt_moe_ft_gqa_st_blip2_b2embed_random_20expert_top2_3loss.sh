@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# start: lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/2_sft_gqa_blip2_gqa_train_sft_ques_type_prompt_0925.sh" -n 1 -j blip2sft-gqa-type-0925  -t all -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
+# start: lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/3_prompt_moe_ft_gqa_st_blip2_b2embed_random_20expert_top2_3loss.sh" -n 1 -j blip2-moe-gqa-20ex-rand-1022  -t nvidia-a800-sxm4-80gb -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
 # PATH_ORI=${0%/*}
 # PROJECT_PATH=$(echo ${PATH_ORI} | sed -r 's/\/{2,}/\//')
 # echo "========"
@@ -38,7 +38,7 @@ DIST_URL="env://${MASTER_IP}:${MASTER_PORT}"
 # 配置生成
 cat <<EOT > ${CONFIG_FILE}
 model:
-  arch: blip2_t5_instruct
+  arch: blip2_t5_instruct_pro_moe
   model_type: flant5xxl
   load_pretrained: True
   load_finetuned: False
@@ -62,13 +62,24 @@ model:
   max_output_txt_len: 256
 
   # freeze
-  freeze_t5_proj: False
   freeze_vit: True
+  freeze_llm: True
   freeze_qformer: False
+  freeze_t5_proj: False
+
+  # moe
+  moe_position: "pre" # post (position to insert PromptMoE Part)
+  embed_extract: "blip2_pretrain" # t5
+  repeat_to_init_qt_candidates: True
+  num_qt_candidates: 1
+  moe_topk: 1
+  eval_gate_save: False
+  train_gate_save: True
+  gate_save_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_train_qf_train_qt_linear_gate_textblip2_random_20ex_top2_3loss_textinqf_epo3_1022/"
 
 datasets:
   gqa:
-    type: balanced_sft_ques_type_prompt
+    type: balanced_sft_raw
     vis_processor:
       train:
         name: "blip_image_train"
@@ -85,6 +96,7 @@ datasets:
       images:
         storage: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/"
     
+
 run:
   task: instruction_tuning
   # optimizer
@@ -103,8 +115,8 @@ run:
   warmup_steps: 600
 
   seed: 42
-  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/sft/gqa_500_sft_ques_type_prompt_train_qf_train_qt_textinqf_epo3_1003/"
-
+  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_train_qf_train_qt_linear_gate_textblip2_random_20ex_top2_3loss_textinqf_epo3_1022/"
+  
   amp: True
   resume_ckpt_path: null
 

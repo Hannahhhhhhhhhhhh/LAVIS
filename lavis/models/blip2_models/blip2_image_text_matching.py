@@ -20,7 +20,8 @@ class Blip2ITM(Blip2Qformer):
         - coco: fintuned model on coco
     Usage:
         >>> from lavis.models import load_model
-        >>> model = load_model("blip2_image_text_matching", "pretrained")
+        >>> model = load_model("blip2_image_text_matching", "pretrain")
+        >>> model = load_model("blip2_image_text_matching", "pretrain_vitL")
         >>> model = load_model("blip2_image_text_matching", "coco")
     """
 

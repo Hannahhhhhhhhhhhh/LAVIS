@@ -10,8 +10,11 @@ import random
 import copy
 import json
 import os
+import numpy as np
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.cuda.amp import autocast as autocast
 from transformers import T5TokenizerFast
 
@@ -20,7 +23,7 @@ from lavis.models.blip2_models.blip2 import Blip2Base, disabled_train
 from lavis.models.blip2_models.modeling_t5 import T5Config, T5ForConditionalGeneration
 from transformers.modeling_outputs import BaseModelOutput
 
-from lavis.models.blip2_models.prompt_moe.prompt_moe import init_query_token_candidates, MoEPrompt
+from lavis.models.blip2_models.prompt_moe.prompt_moe import init_query_token_candidates, PrePromptMoE, PostPromptMoE
 
 @registry.register_model("blip2_t5_instruct_pro_moe")
 class Blip2T5InstructPromptMOE(Blip2Base):
@@ -30,7 +33,9 @@ class Blip2T5InstructPromptMOE(Blip2Base):
         - flant5xxl
     Usage:
         >>> from lavis.models import load_model
-        >>> model = load_model("blip2_t5_instruct_pro_moe", "flant5xxl")
+        >>> import torch
+        >>> device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        >>> model = load_model("blip2_t5_instruct_pro_moe", "flant5xxl", device=device)
     """
 
     PRETRAINED_MODEL_CONFIG_DICT = {
@@ -61,6 +66,8 @@ class Blip2T5InstructPromptMOE(Blip2Base):
         repeat_to_init_qt_candidates=True,
         num_qt_candidates=5,
         moe_topk=2,
+        moe_position="pre",
+        embed_extract="t5",
         text_embed_key="prompt",
         eval_gate_save=False,
         train_gate_save=False,
@@ -136,12 +143,39 @@ class Blip2T5InstructPromptMOE(Blip2Base):
 
         print('Init query token candidates')
         if num_qt_candidates > 1:
+            
             self.query_token_candidates = init_query_token_candidates(num_query_token, num_qt_candidates) # shape:[num_qt_candidates, num_query_token, q_former_hidden_size]
             if repeat_to_init_qt_candidates:
                 self.query_token_candidates = torch.nn.Parameter(self.query_tokens.repeat(num_qt_candidates, 1, 1))
                 self.query_tokens.requires_grad = False
             print(self.query_token_candidates.shape)
-            self.PromptMoE = MoEPrompt(self.t5_model.config.hidden_size, num_qt_candidates, self.query_token_candidates, route_method="gate-single-token", topk=moe_topk)
+            self.moe_position = moe_position
+            
+            if self.moe_position == "pre": # PromptMoE + Qformer
+                self.embed_extract = embed_extract
+                if self.embed_extract == "t5":
+                    self.text_embed_size = self.t5_model.config.hidden_size
+
+                elif self.embed_extract == "blip2_pretrain":
+                    from lavis.models import load_model
+                    self.embed_extractor = load_model(
+                        "blip2",
+                        "pretrain", 
+                        is_eval=True, 
+                    ) # BLIP2 first-stage model with Q-former and ViT.
+                    for name, param in self.embed_extractor.named_parameters():
+                        param.requires_grad = False
+                    # self.text_embed_size = self.Qformer.config.hidden_size
+                    self.text_embed_size = self.embed_extractor.text_proj.out_features
+                
+                elif self.embed_extract == "random":
+                    self.text_embed_size = self.Qformer.config.hidden_size
+                self.PromptMoE = PrePromptMoE(self.text_embed_size, num_qt_candidates, self.query_token_candidates, route_method="gate-single-token", topk=moe_topk)
+            
+            elif moe_position == "post": #  Qformer + PromptMoE
+                self.text_embed_size = self.Qformer.config.hidden_size
+                self.PromptMoE = PostPromptMoE(self.text_embed_size, num_qt_candidates, topk=moe_topk)
+
 
         # freeze qformer        
         if freeze_qformer:
@@ -198,57 +232,113 @@ class Blip2T5InstructPromptMOE(Blip2Base):
         #                    "red",
         #                    "ocean"
         #                    ],
-        #     'image': torch.randn(4, 3, 224, 224)
+        #     'image': torch.randn(4, 3, 224, 224).half().to(device)
         # }
+        # samples = samples.to(device)
 
         image = samples["image"]
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
-
         bz = image_embeds.shape[0]
 
-        if self.num_qt_candidates > 1:
-            ## extract text_embeds
-            # text_embeds = torch.randn(bz, 1, self.t5_model.config.hidden_size)
-            with self.maybe_autocast(dtype=torch.bfloat16):
-                text_embeds = self._extract_text_embed_by_t5(samples["text_input"], samples["text_output"], image.device)
-                ## select proper query_tokens by prompt moe
-                select_query_tokens, balance_loss, importance_loss, gate_load, gate = self.PromptMoE._forward_gate_single_token(text_embeds)
-                query_tokens = select_query_tokens # torch.Size([bz, 32, 768])
-        else:
-            query_tokens = self.query_tokens.expand(bz, -1, -1)
-            balance_loss, importance_loss = 0, 0
-        
-        ## Q-former Forward
-        if self.qformer_text_input:
-            text_Qformer = self.tokenizer(
-                samples["text_input"],
-                padding='longest',
-                truncation=True,
-                max_length=self.max_txt_len,
-                return_tensors="pt",
-            ).to(image.device)
-            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
+        if self.moe_position == "pre":
+            if self.num_qt_candidates > 1:
+                ## extract text_embeds
+                with self.maybe_autocast(dtype=torch.bfloat16):
+                    if self.embed_extract == "t5":
+                        text_embeds = self._extract_text_embed_by_t5(samples['text_input'], samples['text_output'], image.device)
+                    elif self.embed_extract == "blip2_pretrain":
+                        text_embeds = self._extract_text_embed_by_qformer_pretrain_s1(samples['text_input'], image.device)
+                    elif self.embed_extract == "random":
+                        text_embeds = torch.randn(bz, 1, self.text_embed_size )
+                    ## select proper query_tokens by prompt moe
+                    select_query_tokens, balance_loss, importance_loss, gate_load, gate = self.PromptMoE._forward_gate_single_token(text_embeds)
+                    query_tokens = select_query_tokens # torch.Size([bz, 32, 768])
+            else:
+                query_tokens = self.query_tokens.expand(bz, -1, -1)
+                balance_loss, importance_loss = 0, 0
 
-            query_output = self.Qformer.bert(
-                text_Qformer.input_ids,
-                attention_mask=Qformer_atts,
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                return_dict=True,
-            )
-        else:
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                return_dict=True,
-            )
+            ## Q-former Forward with one query tokens
+            if self.qformer_text_input:
+                text_Qformer = self.tokenizer(
+                    samples["text_input"],
+                    padding='longest',
+                    truncation=True,
+                    max_length=self.max_txt_len,
+                    return_tensors="pt",
+                ).to(image.device)
+                query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+                Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
 
-        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+                query_output = self.Qformer.bert(
+                    text_Qformer.input_ids,
+                    attention_mask=Qformer_atts,
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=image_embeds,
+                    encoder_attention_mask=image_atts,
+                    return_dict=True,
+                )
+            else:
+                query_output = self.Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=image_embeds,
+                    encoder_attention_mask=image_atts,
+                    return_dict=True,
+                )
+                query_output_to_linear = query_output.last_hidden_state[:,:query_tokens.size(1),:]
+
+
+        elif self.moe_position == "post":
+            # self.query_token_candidates : size[num_qt_candidates, 32, 768]
+            candi_query_tokens = self.query_token_candidates.expand(bz, -1, -1, -1).reshape(-1, self.query_token_candidates.shape[1], self.query_token_candidates.shape[2]) # size[num_qt_candidates*bz, 32, 768]
+            # image_embeds_repeat = np.repeat(image_embeds, self.num_qt_candidates, axis=0)
+            # image_atts_repeat = np.repeat(image_atts, self.num_qt_candidates, axis=0)
+
+            image_embeds_repeat = image_embeds.repeat_interleave(self.num_qt_candidates, dim=0)
+            image_atts_repeat = image_atts.repeat_interleave(self.num_qt_candidates, dim=0)
+                
+            ## Q-former Forward with candidates query tokens
+            if self.qformer_text_input:
+                text_Qformer = self.tokenizer(
+                    samples["text_input"],
+                    padding='longest',
+                    truncation=True,
+                    max_length=self.max_txt_len,
+                    return_tensors="pt",
+                ).to(image.device)
+                # text_Qformer_input_ids_repeat = np.repeat(text_Qformer.input_ids, self.num_qt_candidates, axis=0) # [bz*num_qt_candidates, batch_seq_len]
+                # text_Qformer_attn_mask_repeat = np.repeat(text_Qformer.attention_mask, self.num_qt_candidates, axis=0) # [bz*num_qt_candidates, batch_seq_len]
+
+                text_Qformer_input_ids_repeat = text_Qformer.input_ids.repeat_interleave(self.num_qt_candidates, dim=0) # [bz*num_qt_candidates, batch_seq_len]
+                text_Qformer_attn_mask_repeat = text_Qformer.attention_mask.repeat_interleave(self.num_qt_candidates, dim=0) # [bz*num_qt_candidates, batch_seq_len]
+
+                query_atts = torch.ones(candi_query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+                Qformer_atts = torch.cat([query_atts,text_Qformer_attn_mask_repeat],dim=1)
+
+                query_output = self.Qformer.bert(
+                    text_Qformer_input_ids_repeat,
+                    attention_mask=Qformer_atts,
+                    query_embeds=candi_query_tokens,
+                    encoder_hidden_states=image_embeds_repeat,
+                    encoder_attention_mask=image_atts_repeat,
+                    return_dict=True,
+                ) # query_output.last_hidden_state size [torch.Size([bz*num_qt_candidates, 32+batch_seq_len, 768])]
+                query_output_to_linear = query_output.last_hidden_state[:,:self.query_token_candidates.size(1),:]
+            else:
+                query_output = self.Qformer.bert(
+                    query_embeds=candi_query_tokens,
+                    encoder_hidden_states=image_embeds_repeat,
+                    encoder_attention_mask=image_atts_repeat,
+                    return_dict=True,
+                ) # query_output.last_hidden_state size [torch.Size([bz*num_qt_candidates, 32, 768])]
+            # [(sample1, query1), (sample1, query2),..., (sample2, query1),(sample2, query2), ... , (sample_bz, query1),..., (sample_bz, queryn)]
+            text_cls = query_output.last_hidden_state[:,self.query_token_candidates.size(1),:] # torch.Size([bz*num_qt_candidates, 768])
+            text_cls_split = text_cls.view(bz, self.num_qt_candidates, -1) # torch.Size([bz, num_qt_candidates, 768])
+            query_tokens_output = query_output.last_hidden_state[:, :self.query_token_candidates.size(1), :] # torch.Size([bz*num_qt_candidates, 32, 768])
+            query_output_to_linear, balance_loss, importance_loss, gate_load, gate = self.PromptMoE._forward_gate_text_single_token(text_cls_split, query_tokens_output)
+
+        inputs_t5 = self.t5_proj(query_output_to_linear)
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
         fs_embeds, fs_atts = None, None
@@ -306,81 +396,6 @@ class Blip2T5InstructPromptMOE(Blip2Base):
             final_loss = loss + balance_loss + importance_loss
             return {"loss": final_loss}
 
-    def prepare_few_shot_embeds(self, samples):
-        this_n_fs = random.choices(
-            list(range(self.num_few_shot_examples + 1)),
-            weights=[1 - self.few_shot_prob] + [self.few_shot_prob / self.num_few_shot_examples] * self.num_few_shot_examples
-        )[0]
-
-        if this_n_fs == 0:
-            return None, None
-
-        images = []
-        text_input = []
-        for sample in samples:
-            for n in range(this_n_fs):
-                images.append(sample['image'][n])
-                text_input.append(sample['text_input'][n])
-        images = torch.stack(images, dim=0)
-
-        image = images
-
-        with self.maybe_autocast():
-            image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
-
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        if self.qformer_text_input:
-            text_Qformer = self.tokenizer(
-                text_input,
-                padding='longest',
-                truncation=True,
-                max_length=self.max_txt_len,
-                return_tensors="pt",
-            ).to(image.device)
-            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
-            query_output = self.Qformer.bert(
-                text_Qformer.input_ids,
-                attention_mask = Qformer_atts,
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                return_dict=True,
-            )
-        else:
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                return_dict=True,
-            )
-
-        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
-        atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
-
-        with self.maybe_autocast(dtype=torch.bfloat16):
-            input_tokens = self.t5_tokenizer(
-                text_input,
-                padding="longest",
-                truncation=True,
-                max_length=self.max_txt_len,
-                return_tensors="pt",
-            ).to(image.device)
-
-            encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
-
-            inputs_embeds = self.t5_model.encoder.embed_tokens(input_tokens.input_ids)
-            inputs_embeds = torch.cat([inputs_t5, inputs_embeds], dim=1)
-
-        if this_n_fs > 1:
-            encoder_atts = encoder_atts.reshape(encoder_atts.size(0) // this_n_fs, encoder_atts.size(1) * this_n_fs)
-            inputs_embeds = inputs_embeds.reshape(inputs_embeds.size(0) // this_n_fs, inputs_embeds.size(1) * this_n_fs, inputs_embeds.size(2))
-
-        return inputs_embeds, encoder_atts
-
     @torch.no_grad()
     def generate(
         self,
@@ -413,74 +428,48 @@ class Blip2T5InstructPromptMOE(Blip2Base):
         if "ocr_tokens" in samples.keys() and "{}" in prompt[0]:
             prompt = [p.format(', '.join(samples['ocr_tokens'][i][:30])) for i, p in enumerate(prompt)]
 
-        if self.num_qt_candidates > 1:
-
-            if self.text_embed_key in samples.keys():
-                text_input = samples[self.text_embed_key]
-            else:
-                text_input = samples["prompt"]
-
-            with self.maybe_autocast(dtype=torch.bfloat16):
-                text_embeds = self._extract_text_embed_by_t5(text_input, samples['text_output'], image.device)
-                select_query_tokens, balance_loss, importance_loss, gate_load, gate = self.PromptMoE._forward_gate_single_token(text_embeds)
-                query_tokens = select_query_tokens # torch.Size([bz, 32, 768])
-        else: # back to one query token
-            query_tokens = self.query_tokens.expand(bs, -1, -1)
-            balance_loss, importance_loss = 0, 0
-
-        if self.qformer_text_input:
-            # remove ocr tokens in q_former (for eval textvqa)
-            # qformer_prompt = prompt
-            # qformer_prompt = ['Question: ' + qp.split(' Question: ')[1] for qp in qformer_prompt]
-
-            text_Qformer = self.tokenizer(
-                prompt,
-                padding='longest',
-                truncation=True,
-                max_length=self.max_txt_len,
-                return_tensors="pt",
-            ).to(image.device)
-            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
-            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
-
-        # For video data
-        if image.dim() == 5:
-            inputs_t5, atts_t5 = [], []
-            for j in range(image.size(2)):
-                this_frame = image[:,:,j,:,:]
-                with self.maybe_autocast():
-                    frame_embeds = self.ln_vision(self.visual_encoder(this_frame))
-                    frame_atts = torch.ones(frame_embeds.size()[:-1], dtype=torch.long).to(image.device)
-
-                if self.qformer_text_input:
-                    frame_query_output = self.Qformer.bert(
-                        text_Qformer.input_ids,
-                        attention_mask = Qformer_atts,
-                        query_embeds=query_tokens,
-                        encoder_hidden_states=frame_embeds,
-                        encoder_attention_mask=frame_atts,
-                        return_dict=True,
-                    )
-                else:
-                    frame_query_output = self.Qformer.bert(
-                        query_embeds=query_tokens,
-                        encoder_hidden_states=frame_embeds,
-                        encoder_attention_mask=frame_atts,
-                        return_dict=True,
-                    )
-
-                frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:,:query_tokens.size(1),:])
-                frame_atts_t5 = torch.ones(frame_inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
-                inputs_t5.append(frame_inputs_t5)
-                atts_t5.append(frame_atts_t5)
-            inputs_t5 = torch.cat(inputs_t5, dim=1)
-            atts_t5 = torch.cat(atts_t5, dim=1)
+        # define select key
+        if self.text_embed_key in samples.keys():
+            text_input = samples[self.text_embed_key]
         else:
-            with self.maybe_autocast():
-                image_embeds = self.ln_vision(self.visual_encoder(image))
-            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
+            text_input = samples["prompt"]
+
+        # image embed
+        with self.maybe_autocast():
+            image_embeds = self.ln_vision(self.visual_encoder(image))
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
+
+
+        if self.moe_position == "pre":
+            if self.num_qt_candidates > 1:
+                
+                with self.maybe_autocast(dtype=torch.bfloat16):
+                    if self.embed_extract == "t5":
+                        text_embeds = self._extract_text_embed_by_t5(text_input, samples['text_output'], image.device)
+                    elif self.embed_extract == "blip2_pretrain":
+                        text_embeds = self._extract_text_embed_by_qformer_pretrain_s1(text_input, image.device)
+                    elif self.embed_extract == "random":
+                        text_embeds = torch.randn(bs, 1, self.text_embed_size )
+                    select_query_tokens, _, _, gate_load, gate = self.PromptMoE._forward_gate_single_token(text_embeds)
+                    query_tokens = select_query_tokens # torch.Size([bz, 32, 768])
+            else: # back to one query token
+                query_tokens = self.query_tokens.expand(bs, -1, -1)
 
             if self.qformer_text_input:
+                # remove ocr tokens in q_former (for eval textvqa)
+                # qformer_prompt = prompt
+                # qformer_prompt = ['Question: ' + qp.split(' Question: ')[1] for qp in qformer_prompt]
+
+                text_Qformer = self.tokenizer(
+                    prompt,
+                    padding='longest',
+                    truncation=True,
+                    max_length=self.max_txt_len,
+                    return_tensors="pt",
+                ).to(image.device)
+                query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+                Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
+                
                 query_output = self.Qformer.bert(
                     text_Qformer.input_ids,
                     attention_mask=Qformer_atts,
@@ -496,9 +485,59 @@ class Blip2T5InstructPromptMOE(Blip2Base):
                     encoder_attention_mask=image_atts,
                     return_dict=True,
                 )
+                query_output_to_linear = query_output.last_hidden_state[:,:query_tokens.size(1),:]
 
-            inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
-            atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
+        elif self.moe_position == "post":
+            # self.query_token_candidates : size[num_qt_candidates, 32, 768]
+            candi_query_tokens = self.query_token_candidates.expand(bs, -1, -1, -1).reshape(-1, self.query_token_candidates.shape[1], self.query_token_candidates.shape[2]) # size[num_qt_candidates*bz, 32, 768]
+            # image_embeds_repeat = np.repeat(image_embeds, self.num_qt_candidates, axis=0)
+            # image_atts_repeat = np.repeat(image_atts, self.num_qt_candidates, axis=0)
+            image_embeds_repeat = image_embeds.repeat_interleave(self.num_qt_candidates, dim=0)
+            image_atts_repeat = image_atts.repeat_interleave(self.num_qt_candidates, dim=0)
+
+            ## Q-former Forward with candidates query tokens
+            if self.qformer_text_input:
+                text_Qformer = self.tokenizer(
+                    text_input,
+                    padding='longest',
+                    truncation=True,
+                    max_length=self.max_txt_len,
+                    return_tensors="pt",
+                ).to(image.device)
+                # text_Qformer_input_ids_repeat = np.repeat(text_Qformer.input_ids, self.num_qt_candidates, axis=0) # [bz*num_qt_candidates, batch_seq_len]
+                # text_Qformer_attn_mask_repeat = np.repeat(text_Qformer.attention_mask, self.num_qt_candidates, axis=0) # [bz*num_qt_candidates, batch_seq_len]
+                text_Qformer_input_ids_repeat = text_Qformer.input_ids.repeat_interleave(self.num_qt_candidates, dim=0) # [bz*num_qt_candidates, batch_seq_len]
+                text_Qformer_attn_mask_repeat = text_Qformer.attention_mask.repeat_interleave(self.num_qt_candidates, dim=0) # [bz*num_qt_candidates, batch_seq_len]
+
+                query_atts = torch.ones(candi_query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+                Qformer_atts = torch.cat([query_atts,text_Qformer_attn_mask_repeat],dim=1)
+
+                query_output = self.Qformer.bert(
+                    text_Qformer_input_ids_repeat,
+                    attention_mask=Qformer_atts,
+                    query_embeds=candi_query_tokens,
+                    encoder_hidden_states=image_embeds_repeat,
+                    encoder_attention_mask=image_atts_repeat,
+                    return_dict=True,
+                ) # query_output.last_hidden_state size [torch.Size([bz*num_qt_candidates, 32+batch_seq_len, 768])]
+                query_output_to_linear = query_output.last_hidden_state[:,:self.query_token_candidates.size(1),:]
+            else:
+                query_output = self.Qformer.bert(
+                    query_embeds=candi_query_tokens,
+                    encoder_hidden_states=image_embeds_repeat,
+                    encoder_attention_mask=image_atts_repeat,
+                    return_dict=True,
+                ) # query_output.last_hidden_state size [torch.Size([bz*num_qt_candidates, 32, 768])]
+            # [(sample1, query1), (sample1, query2),..., (sample2, query1),(sample2, query2), ... , (sample_bz, query1),..., (sample_bz, queryn)]
+            text_cls = query_output.last_hidden_state[:,self.query_token_candidates.size(1),:] # torch.Size([bz*num_qt_candidates, 768])
+            text_cls_split = text_cls.view(bs, self.num_qt_candidates, -1) # torch.Size([bz, num_qt_candidates, 768])
+            query_tokens_output = query_output.last_hidden_state[:, :self.query_token_candidates.size(1), :] # torch.Size([bz*num_qt_candidates, 32, 768])
+            query_output_to_linear, _, _, gate_load, gate = self.PromptMoE._forward_gate_text_single_token(text_cls_split, query_tokens_output)
+
+        # For video data deleted : TODO
+
+        inputs_t5 = self.t5_proj(query_output_to_linear)
+        atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
         input_tokens = self.t5_tokenizer(
             prompt,
@@ -831,6 +870,102 @@ class Blip2T5InstructPromptMOE(Blip2Base):
 
         return output_class_ranks
 
+    def prepare_few_shot_embeds(self, samples):
+        this_n_fs = random.choices(
+            list(range(self.num_few_shot_examples + 1)),
+            weights=[1 - self.few_shot_prob] + [self.few_shot_prob / self.num_few_shot_examples] * self.num_few_shot_examples
+        )[0]
+
+        if this_n_fs == 0:
+            return None, None
+
+        images = []
+        text_input = []
+        for sample in samples:
+            for n in range(this_n_fs):
+                images.append(sample['image'][n])
+                text_input.append(sample['text_input'][n])
+        images = torch.stack(images, dim=0)
+
+        image = images
+
+        with self.maybe_autocast():
+            image_embeds = self.ln_vision(self.visual_encoder(image))
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
+            image.device
+        )
+
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        if self.qformer_text_input:
+            text_Qformer = self.tokenizer(
+                text_input,
+                padding='longest',
+                truncation=True,
+                max_length=self.max_txt_len,
+                return_tensors="pt",
+            ).to(image.device)
+            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+            Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
+            query_output = self.Qformer.bert(
+                text_Qformer.input_ids,
+                attention_mask = Qformer_atts,
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                return_dict=True,
+            )
+        else:
+            query_output = self.Qformer.bert(
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                return_dict=True,
+            )
+
+        inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+        atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
+
+        with self.maybe_autocast(dtype=torch.bfloat16):
+            input_tokens = self.t5_tokenizer(
+                text_input,
+                padding="longest",
+                truncation=True,
+                max_length=self.max_txt_len,
+                return_tensors="pt",
+            ).to(image.device)
+
+            encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
+
+            inputs_embeds = self.t5_model.encoder.embed_tokens(input_tokens.input_ids)
+            inputs_embeds = torch.cat([inputs_t5, inputs_embeds], dim=1)
+
+        if this_n_fs > 1:
+            encoder_atts = encoder_atts.reshape(encoder_atts.size(0) // this_n_fs, encoder_atts.size(1) * this_n_fs)
+            inputs_embeds = inputs_embeds.reshape(inputs_embeds.size(0) // this_n_fs, inputs_embeds.size(1) * this_n_fs, inputs_embeds.size(2))
+
+        return inputs_embeds, encoder_atts
+
+
+
+    def _extract_text_embed_by_qformer_pretrain_s1(
+        self,
+        text_input, 
+        device
+    ):  
+        text_inputs = self.embed_extractor.tokenizer(
+            text_input,
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_txt_len, 
+            return_tensors="pt",
+        ).to(device)
+        text_feats = self.embed_extractor.forward_text(text_inputs)
+        # return text_feats.unsqueeze(1) # torch.Size([bz, 1, 768])
+
+        text_embeds = F.normalize(self.embed_extractor.text_proj(text_feats))
+        return text_embeds.unsqueeze(1) # torch.Size([bz, 1, 256])
+
+
     def _extract_text_embed_by_t5(
         self,
         text_input, 
@@ -956,6 +1091,8 @@ class Blip2T5InstructPromptMOE(Blip2Base):
         repeat_to_init_qt_candidates= cfg.get("repeat_to_init_qt_candidates", True)
         num_qt_candidates = cfg.get("num_qt_candidates", 5)
         moe_topk = cfg.get("moe_topk", 2)
+        moe_position = cfg.get("moe_position", "pre")
+        embed_extract = cfg.get("embed_extract", "t5")
         text_embed_key = cfg.get("text_embed_key", "prompt")
         train_gate_save = cfg.get("train_gate_save", False)
         eval_gate_save = cfg.get("eval_gate_save", False)
@@ -984,6 +1121,8 @@ class Blip2T5InstructPromptMOE(Blip2Base):
             repeat_to_init_qt_candidates=repeat_to_init_qt_candidates,
             num_qt_candidates=num_qt_candidates,
             moe_topk=moe_topk,
+            moe_position=moe_position,
+            embed_extract=embed_extract,
             text_embed_key=text_embed_key,
             eval_gate_save=eval_gate_save,
             train_gate_save=train_gate_save,

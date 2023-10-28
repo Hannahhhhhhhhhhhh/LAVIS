@@ -68,6 +68,8 @@ model:
   freeze_t5_proj: False
 
   # moe
+  moe_position: "pre" # post (position to insert PromptMoE Part)
+  embed_extract: "blip2_pretrain" # t5
   repeat_to_init_qt_candidates: True
   num_qt_candidates: 1
   moe_topk: 1

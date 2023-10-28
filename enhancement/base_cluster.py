@@ -1,14 +1,17 @@
 import json
 import os 
 import sys
+import random
 from tqdm import tqdm
+import numpy as np
 
 import torch
 import torch.nn.functional as F
+import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset, DataLoader
 
 from lavis.models import load_model
-
+from lavis.common.dist_utils import get_rank, init_distributed_mode
 
 class SFTCluster:
     def __init__(self, cfg):

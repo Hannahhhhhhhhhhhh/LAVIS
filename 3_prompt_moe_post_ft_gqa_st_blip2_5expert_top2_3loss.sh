@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# start: lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/3_prompt_moe_ft_llava_257k_st_blip2_20expert_3loss.sh" -n 1 -j blip2-moe-1013  -t nvidia-a800-sxm4-80gb -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
+# start: lizrun start -c "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/3_prompt_moe_post_ft_gqa_st_blip2_5expert_top2_3loss.sh" -n 1 -j blip2-post-moe-gqa-5ex-1027  -t nvidia-a800-sxm4-80gb -i reg-ai.chehejia.com/ssai/lizr/cu118/py310/pytorch:2.0.1-multinode-nccl -p default
 # PATH_ORI=${0%/*}
 # PROJECT_PATH=$(echo ${PATH_ORI} | sed -r 's/\/{2,}/\//')
 # echo "========"
@@ -68,15 +68,18 @@ model:
   freeze_t5_proj: False
 
   # moe
+  moe_position: "post" # post (position to insert PromptMoE Part)
+  embed_extract: "blip2_pretrain" # t5, random (way to extract embeddings of task instruction if moe_position is pre)
   repeat_to_init_qt_candidates: True
-  num_qt_candidates: 20
+  num_qt_candidates: 5
+  moe_topk: 2
   eval_gate_save: True
-  train_gate_save: True
-  gate_save_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/llava_st_257k_raw_train_qf_train_qt_linear_gate_textt5_20ex_3loss_textinqf_epo3_1012/"
+  train_gate_save: False
+  gate_save_path: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_postMoE_train_qf_train_qt_linear_gate_5ex_top2_3loss_textinqf_epo3_1027/"
 
 datasets:
-  llava150k_en_sft:
-    type: prompt_moe
+  gqa:
+    type: balanced_sft_raw
     vis_processor:
       train:
         name: "blip_image_train"
@@ -91,7 +94,7 @@ datasets:
         name: "blip_question"
     build_info:
       images:
-        storage: "/mnt/pfs-guan-ssai/nlu/dingyifeng/data/COCO"
+        storage: "/mnt/pfs-guan-ssai/nlu/wanghanzi/data/GQA/images/"
     
 
 run:
@@ -105,14 +108,14 @@ run:
   save_freq: 1500
 
   weight_decay: 0.05
-  max_epoch: 3
+  max_epoch: 5
   batch_size_train: 16
   batch_size_eval: 32
   num_workers: 4
   warmup_steps: 600
 
   seed: 42
-  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/llava_st_257k_raw_train_qf_train_qt_linear_gate_textt5_20ex_3loss_textinqf_epo3_1012/"
+  output_dir: "/mnt/pfs-guan-ssai/nlu/wanghanzi/experiments/blip2/flant5xxl/prompt_moe/gqa_943k_raw_postMoE_train_qf_train_qt_linear_gate_5ex_top2_3loss_textinqf_epo3_1027/"
   
   amp: True
   resume_ckpt_path: null

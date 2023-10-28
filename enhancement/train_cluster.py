@@ -177,10 +177,10 @@ class SFTClusterTrain(SFTCluster):
             with open(os.path.join(self.split_samples_path, f"{str(k)}_cluster.json"),"w") as f:
                 f.write(json.dumps(v))
 
-    def coreset_sampling():
-        # coreset algorithm KCentergreedy, select set of core samples from the task samples
-        # choose k center points such that minimize the largest distance between a random data point and its nearest center,
-        return 0
+    # def coreset_sampling():
+    #     # coreset algorithm KCentergreedy, select set of core samples from the task samples
+    #     # choose k center points such that minimize the largest distance between a random data point and its nearest center,
+    #     return 0
 
     def train(self):
         ## train
@@ -197,10 +197,10 @@ class SFTClusterTrain(SFTCluster):
         # coreset sampling, 从每个cluster中选出代表性的samples(Optimal)
         # coreset_sampling()
     
-    def predict(self, test_sample):
-        ## predict
-        self.load_center_points()
-        self.predict_kmeans(test_sample)
+    # def predict(self, test_sample):
+    #     ## predict
+    #     self.load_center_points()
+    #     self.predict_kmeans(test_sample)
 
 def main():
     config_file = "/mnt/pfs-guan-ssai/nlu/wanghanzi/multimodal/LAVIS/enhancement/config/llava_single_turn_257k_cluster.yaml"
